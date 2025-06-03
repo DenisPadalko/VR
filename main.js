@@ -22,8 +22,6 @@ function deg2rad(angle) {
 }
 
 function computeAlpha(convergence) {
-    // Межі прозорості: від 0.2 (темно) до 0.7 (світло)
-    // Межі convergence: від 10 до 500 (підібрати під свої слайдери)
     const minC = 10;
     const maxC = 500;
     const minAlpha = 0.2;
@@ -33,7 +31,6 @@ function computeAlpha(convergence) {
     return minAlpha + (maxAlpha - minAlpha) * t;
 }
 
-// Простий perspective matrix
 const m4 = window.m4 || {};
 m4.perspective = function(fovy, aspect, near, far) {
     let f = 1.0 / Math.tan(fovy / 2);
@@ -58,7 +55,6 @@ m4.perspective = function(fovy, aspect, near, far) {
     return out;
 };
 
-// Оновлений StereoCamera з клонованим convergence для унеможливлення "руху" частин
 function StereoCamera(convergence, eyeSeparation, aspectRatio, fov, nearClip, farClip) {
     this.mConvergence = convergence;
     this.mEyeSeparation = eyeSeparation;
@@ -67,10 +63,8 @@ function StereoCamera(convergence, eyeSeparation, aspectRatio, fov, nearClip, fa
     this.mNearClippingDistance = nearClip;
     this.mFarClippingDistance = farClip;
 
-    // Мінімальне значення для коректної роботи ефекту
-    const minEffectiveConvergence = 50; // підбери під свою сцену! (має бути більше nearClip і ~середина сцени)
+    const minEffectiveConvergence = 50; 
 
-    // Створюємо "заморожену" точку конвергенції при малих значеннях
     this.effectiveConvergence = Math.max(this.mConvergence, minEffectiveConvergence);
 
     this.getFrustum = function(eyeSign) {
@@ -173,7 +167,6 @@ function draw() {
     let matAccum0 = m4.multiply(rotateToPointZero, modelView);
     let matAccum1 = m4.multiply(translateToPointZero, matAccum0);
 
-    // Стереоефект завжди є, але при малих convergence паралакс не збільшується (заморожується)
     gl.colorMask(true, false, false, false);
     let leftMVP = stereoCamera.ApplyFrustum(matAccum1, -1);
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, leftMVP);
@@ -341,7 +334,6 @@ function updateParameter(param, value, displayElementId) {
         surface.BufferData(vertices, indices, uLines, vLines);
     }
 
-    // Оновити прозорість і при інших параметрах, якщо треба
     if (param === 'convergence') {
         surfaceAlpha = computeAlpha(convergence);
     }
@@ -359,7 +351,6 @@ function setupWebcam() {
             })
             .catch(function(error) {
                 console.error("Webcam error: ", error);
-                // Fallback to black background if webcam fails
                 video.style.display = 'none';
                 document.getElementById('webglcanvas').style.backgroundColor = 'black';
             });
@@ -411,7 +402,6 @@ function init() {
     handleResize();
     window.addEventListener('resize', handleResize);
 
-    // Setup event listeners for controls
     document.getElementById("eyeSeparation").addEventListener("input", function() {
         updateParameter('eyeSeparation', this.value, 'eyeSeparationValue');
     });
