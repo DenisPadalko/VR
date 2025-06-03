@@ -17,13 +17,19 @@ const farClip = 100;
 
 let surfaceAlpha = 0.7;
 
+let socket;
+let sensorData = {
+    alpha: 0, 
+    beta: 0,   
+    gamma: 0  
+};
+let useSensor = false;
+
 function deg2rad(angle) {
     return angle * Math.PI / 180;
 }
 
 function computeAlpha(convergence) {
-    // Межі прозорості: від 0.2 (темно) до 0.7 (світло)
-    // Межі convergence: від 10 до 500 (підібрати під свої слайдери)
     const minC = 10;
     const maxC = 500;
     const minAlpha = 0.2;
@@ -33,32 +39,6 @@ function computeAlpha(convergence) {
     return minAlpha + (maxAlpha - minAlpha) * t;
 }
 
-// Простий perspective matrix
-const m4 = window.m4 || {};
-m4.perspective = function(fovy, aspect, near, far) {
-    let f = 1.0 / Math.tan(fovy / 2);
-    let nf = 1 / (near - far);
-    let out = new Float32Array(16);
-    out[0] = f / aspect;
-    out[1] = 0;
-    out[2] = 0;
-    out[3] = 0;
-    out[4] = 0;
-    out[5] = f;
-    out[6] = 0;
-    out[7] = 0;
-    out[8] = 0;
-    out[9] = 0;
-    out[10] = (far + near) * nf;
-    out[11] = -1;
-    out[12] = 0;
-    out[13] = 0;
-    out[14] = (2 * far * near) * nf;
-    out[15] = 0;
-    return out;
-};
-
-// Оновлений StereoCamera з клонованим convergence для унеможливлення "руху" частин
 function StereoCamera(convergence, eyeSeparation, aspectRatio, fov, nearClip, farClip) {
     this.mConvergence = convergence;
     this.mEyeSeparation = eyeSeparation;
@@ -67,10 +47,8 @@ function StereoCamera(convergence, eyeSeparation, aspectRatio, fov, nearClip, fa
     this.mNearClippingDistance = nearClip;
     this.mFarClippingDistance = farClip;
 
-    // Мінімальне значення для коректної роботи ефекту
-    const minEffectiveConvergence = 50; // підбери під свою сцену! (має бути більше nearClip і ~середина сцени)
+    const minEffectiveConvergence = 50;
 
-    // Створюємо "заморожену" точку конвергенції при малих значеннях
     this.effectiveConvergence = Math.max(this.mConvergence, minEffectiveConvergence);
 
     this.getFrustum = function(eyeSign) {
@@ -160,6 +138,18 @@ function ShaderProgram(name, program) {
     };
 }
 
+function getSensorOrientationMatrix(alpha, beta, gamma) {
+    const a = deg2rad(alpha);
+    const b = deg2rad(beta);
+    const g = deg2rad(gamma);
+
+    let mat = m4.identity();
+    mat = m4.multiply(mat, m4.zRotation(a));
+    mat = m4.multiply(mat, m4.xRotation(b));
+    mat = m4.multiply(mat, m4.yRotation(g));
+    return mat;
+}
+
 function draw() {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -167,22 +157,28 @@ function draw() {
     const aspectRatio = gl.canvas.clientWidth / gl.canvas.clientHeight;
     stereoCamera = new StereoCamera(convergence, eyeSeparation, aspectRatio, fov, nearClip, farClip);
 
-    let modelView = spaceball.getViewMatrix();
-    let rotateToPointZero = m4.axisRotation([0.707, 0.707, 0], 0.7);
-    let translateToPointZero = m4.translation(0, 0, -10);
-    let matAccum0 = m4.multiply(rotateToPointZero, modelView);
-    let matAccum1 = m4.multiply(translateToPointZero, matAccum0);
+    let modelView;
+    
+    if (useSensor) {
+        modelView = getSensorOrientationMatrix(sensorData.alpha, sensorData.beta, sensorData.gamma);
+        modelView = m4.translate(modelView, 0, 0, -10);
+    } else {
+        modelView = spaceball.getViewMatrix();
+        let rotateToPointZero = m4.axisRotation([0.707, 0.707, 0], 0.7);
+        let translateToPointZero = m4.translation(0, 0, -10);
+        modelView = m4.multiply(rotateToPointZero, modelView);
+        modelView = m4.multiply(translateToPointZero, modelView);
+    }
 
-    // Стереоефект завжди є, але при малих convergence паралакс не збільшується (заморожується)
     gl.colorMask(true, false, false, false);
-    let leftMVP = stereoCamera.ApplyFrustum(matAccum1, -1);
+    let leftMVP = stereoCamera.ApplyFrustum(modelView, -1);
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, leftMVP);
     drawSurface();
 
     gl.clear(gl.DEPTH_BUFFER_BIT);
 
     gl.colorMask(false, true, true, false);
-    let rightMVP = stereoCamera.ApplyFrustum(matAccum1, +1);
+    let rightMVP = stereoCamera.ApplyFrustum(modelView, +1);
     gl.uniformMatrix4fv(shProgram.iModelViewProjectionMatrix, false, rightMVP);
     drawSurface();
 
@@ -341,12 +337,60 @@ function updateParameter(param, value, displayElementId) {
         surface.BufferData(vertices, indices, uLines, vLines);
     }
 
-    // Оновити прозорість і при інших параметрах, якщо треба
     if (param === 'convergence') {
         surfaceAlpha = computeAlpha(convergence);
     }
 
     draw();
+}
+
+function connectWebSocket() {
+    const serverAddress = prompt(
+        "Enter Sensor Server address (e.g., ws://192.168.x.x:8080/sensor/connect?type=android.sensor.orientation):",
+        "ws://192.168.0.100:8080/sensor/connect?type=android.sensor.orientation"
+    );
+    if (!serverAddress) return;
+
+    socket = new WebSocket(serverAddress);
+
+    socket.onopen = function(e) {
+        console.log("Connected to sensor server");
+        useSensor = true;
+        document.getElementById('sensor-status').textContent = "Connected";
+        document.getElementById('sensor-status').style.color = "green";
+    };
+
+    socket.onmessage = function(event) {
+    try {
+        const data = JSON.parse(event.data);
+        if (data.values && data.values.length >= 3) {
+            sensorData.alpha = data.values[0];
+            sensorData.beta = data.values[1];
+            sensorData.gamma = data.values[2];
+        }
+        draw();
+    } catch (e) {
+        console.error("Error parsing sensor data:", e, event.data);
+    }
+};
+
+    socket.onclose = function(event) {
+        if (event.wasClean) {
+            console.log(`Connection closed cleanly, code=${event.code}, reason=${event.reason}`);
+        } else {
+            console.log('Connection died');
+        }
+        useSensor = false;
+        document.getElementById('sensor-status').textContent = "Disconnected";
+        document.getElementById('sensor-status').style.color = "red";
+    };
+
+    socket.onerror = function(error) {
+        console.log(`WebSocket error: ${error.message}`);
+        useSensor = false;
+        document.getElementById('sensor-status').textContent = "Error";
+        document.getElementById('sensor-status').style.color = "red";
+    };
 }
 
 function setupWebcam() {
@@ -359,7 +403,6 @@ function setupWebcam() {
             })
             .catch(function(error) {
                 console.error("Webcam error: ", error);
-                // Fallback to black background if webcam fails
                 video.style.display = 'none';
                 document.getElementById('webglcanvas').style.backgroundColor = 'black';
             });
@@ -411,7 +454,6 @@ function init() {
     handleResize();
     window.addEventListener('resize', handleResize);
 
-    // Setup event listeners for controls
     document.getElementById("eyeSeparation").addEventListener("input", function() {
         updateParameter('eyeSeparation', this.value, 'eyeSeparationValue');
     });
@@ -430,6 +472,8 @@ function init() {
     document.getElementById("vGranularity").addEventListener("input", function() {
         updateParameter('vGranularity', this.value, 'vGranularityValue');
     });
+
+    document.getElementById("connectSensor").addEventListener("click", connectWebSocket);
 
     setupWebcam();
     animate();

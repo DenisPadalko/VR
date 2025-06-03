@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title>PA#2 - Anaglyph Stereo with Webcam Background</title>
+    <title>PA#2 - Anaglyph Stereo with Webcam and Sensor</title>
     <style>
         html, body {
             height: 100%;
@@ -54,6 +54,10 @@
             z-index: 1;
             display: block;
         }
+        #sensor-status {
+            color: red;
+            font-weight: bold;
+        }
     </style>
 
     <script src="./Utils/trackball-rotator.js"></script>
@@ -99,6 +103,10 @@
         <label for="vGranularity">V Granularity:</label>
         <input type="range" id="vGranularity" min="10" max="100" value="30" step="10">
         <span id="vGranularityValue">30</span>
+    </div>
+    <div class="control-group">
+        <button id="connectSensor">Connect to Android Sensor</button>
+        <span id="sensor-status">Not connected</span>
     </div>
 </div>
 
