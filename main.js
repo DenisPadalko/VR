@@ -20,13 +20,12 @@ let surfaceAlpha = 0.7;
 let socket;
 let sensorData = { alpha: 0, beta: 0, gamma: 0 };
 let useSensor = false;
-let sensorAngleOffset = null; // для калібрування
+let sensorAngleOffset = null;
 
-// --- Spatial Audio ---
 let audioCtx, audioBuffer, audioSource, panner, filterNode;
 let audioIsPlaying = false;
-let audioAngle = 0;      // degrees (керується сенсором)
-let audioDistance = 6.0; // units from center
+let audioAngle = 0;     
+let audioDistance = 6.0; 
 let audioFilterEnabled = true;
 let soundSphere = { x: 0, y: 0, z: 0, radius: 0.42 };
 
@@ -121,7 +120,6 @@ function ShaderProgram(name, program) {
     this.Use = function() { gl.useProgram(this.prog);}
 }
 
-// Сфера для відображення джерела звуку
 function drawSphere(mvpMatrix, sx, sy, sz, radius, color) {
     const latBands = 12, longBands = 12;
     let vtx = [];
@@ -286,7 +284,6 @@ function connectWebSocket() {
     };
 }
 
-// --- Додаємо функцію для оновлення позиції сфери та panner за сенсором ---
 function updateSoundSphereBySensor() {
     let relativeAlpha = (sensorData.alpha - sensorAngleOffset);
     relativeAlpha = ((relativeAlpha % 360) + 360) % 360;
@@ -366,8 +363,6 @@ function init() {
     setupAudioControls();
     animate();
 }
-
-// ---- Spatial Audio ----
 
 function setupAudioControls() {
     document.getElementById('audioFile').addEventListener('change', handleAudioFile, false);
@@ -466,7 +461,6 @@ function updateAudioFilter() {
     if (wasPlaying) playAudio();
 }
 
-// --- draw: поверхня нерухома, сфера рухається сенсором ---
 function draw() {
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
