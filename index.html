@@ -1,106 +1,93 @@
 <!DOCTYPE html>
 <html>
-<head>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <title>PA#2 - Anaglyph Stereo with Webcam Background</title>
-    <style>
-        html, body {
-            height: 100%;
-        }
-        body {
-            background-color: #EEEEEE;
-            margin: 0;
-            overflow: hidden;
-            height: 100%;
-        }
-        #controls {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background-color: rgba(221, 221, 221, 0.7);
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 100;
-        }
-        .control-group {
-            margin: 5px 0;
-        }
-        label {
-            display: inline-block;
-            width: 200px;
-        }
-        #webgl-container {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-        }
-        #webglcanvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 10;
-            background: transparent;
-            display: block;
-        }
-        #webcam-video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: 1;
-            display: block;
-        }
-    </style>
+  <head>
+    <title>AR.js Custom Surface Example</title>
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.4/aframe/build/aframe-ar-nft.js"></script>
+    <script>
+      const uSegments = 40, vSegments = 40;
+      function CreateSurfaceData() {
+        let vertices = [];
+        let indices = [];
+        let uLines = [];
+        let vLines = [];
 
-    <script src="./Utils/trackball-rotator.js"></script>
-    <script src="./Utils/m4.js"></script>
-    <script src="./shader.gpu"></script>
-    <script src="./main.js"></script>
-</head>
-<body onload="init()">
+        const scale = 0.5;
+        const a = 1.5 * scale, b = 3.0 * scale, c = 2.0 * scale, d = 2.0 * scale;
 
-<div id="webgl-container">
-    <video id="webcam-video" autoplay muted playsinline></video>
-    <canvas id="webglcanvas"></canvas>
-</div>
+        function f(v) {
+          return (a * b) / Math.sqrt((a ** 2) * Math.sin(v) ** 2 + (b ** 2) * Math.cos(v) ** 2);
+        }
 
-<div id="controls">
-    <h2>Anaglyph Stereo Controls</h2>
-    <div class="control-group">
-        <label for="eyeSeparation">Eye Separation:</label>
-        <input type="range" id="eyeSeparation" min="0.1" max="10" value="2" step="0.1">
-        <span id="eyeSeparationValue">2</span>
-    </div>
-    <div class="control-group">
-        <label for="fov">Field of View (degrees):</label>
-        <input type="range" id="fov" min="10" max="120" value="45" step="1">
-        <span id="fovValue">45</span>
-    </div>
-    <div class="control-group">
-        <label for="nearClip">Near Clipping Distance:</label>
-        <input type="range" id="nearClip" min="0.1" max="15" value="5" step="0.1">
-        <span id="nearClipValue">5</span>
-    </div>
-    <div class="control-group">
-        <label for="convergence">Convergence Distance:</label>
-        <input type="range" id="convergence" min="1" max="1000" value="100" step="1">
-        <span id="convergenceValue">1000</span>
-    </div>
-    <div class="control-group">
-        <label for="uGranularity">U Granularity:</label>
-        <input type="range" id="uGranularity" min="10" max="100" value="30" step="10">
-        <span id="uGranularityValue">30</span>
-    </div>
-    <div class="control-group">
-        <label for="vGranularity">V Granularity:</label>
-        <input type="range" id="vGranularity" min="10" max="100" value="30" step="10">
-        <span id="vGranularityValue">30</span>
-    </div>
-</div>
+        for (let i = 0; i <= uSegments; i++) {
+          const t = (i / uSegments) * 2 * Math.PI;
+          for (let j = 0; j <= vSegments; j++) {
+            const v = (j / vSegments) * 2 * Math.PI;
+            const fv = f(v);
+            const cosT = Math.cos(t);
+            const sinT = Math.sin(t);
+            const cosV = Math.cos(v);
+            const sinV = Math.sin(v);
 
-</body>
+            const x = 0.5 * (fv * (1 + cosT) + (d ** 2 - c ** 2) * (1 - cosT) / fv) * cosV;
+            const y = 0.5 * (fv * (1 + cosT) + (d ** 2 - c ** 2) * (1 - cosT) / fv) * sinV;
+            const z = 0.5 * (fv - (d ** 2 - c ** 2) / fv) * sinT;
+
+            vertices.push(x, y, z);
+          }
+        }
+
+        for (let i = 0; i < uSegments; i++) {
+          for (let j = 0; j < vSegments; j++) {
+            const p0 = i * (vSegments + 1) + j;
+            const p1 = p0 + 1;
+            const p2 = (i + 1) * (vSegments + 1) + j;
+            const p3 = p2 + 1;
+
+            indices.push(p0, p1, p2);
+            indices.push(p1, p3, p2);
+          }
+        }
+
+        return { vertices, indices };
+      }
+
+      AFRAME.registerComponent('custom-surface', {
+        schema: {},
+        init: function () {
+          const data = CreateSurfaceData();
+          const geometry = new THREE.BufferGeometry();
+          const vertices = new Float32Array(data.vertices);
+          const indices = new Uint32Array(data.indices);
+
+          geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+          geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+          geometry.computeVertexNormals();
+
+          const material = new THREE.MeshNormalMaterial({ flatShading: true, side: THREE.DoubleSide });
+
+          this.mesh = new THREE.Mesh(geometry, material);
+          this.el.setObject3D('mesh', this.mesh);
+        },
+        remove: function () {
+          if (this.mesh) {
+            this.el.removeObject3D('mesh');
+          }
+        }
+      });
+    </script>
+  </head>
+  <body style="margin: 0; overflow: hidden;">
+    <a-scene
+      vr-mode-ui="enabled: false"
+      embedded
+      arjs="sourceType: webcam; debugUIEnabled: false;"
+      renderer="logarithmicDepthBuffer: true;"
+    >
+      <a-marker type="pattern" url="pattern-marker.patt">
+        <a-entity custom-surface position="0 0 0" scale="0.2 0.2 0.2"></a-entity>
+      </a-marker>
+      <a-entity camera></a-entity>
+    </a-scene>
+  </body>
 </html>
